@@ -20,13 +20,49 @@ interface QueryResult {
   error?: string;
 }
 
-export function QueryTool() {
+interface QueryToolProps {
+  insertTextRef?: React.MutableRefObject<((text: string) => void) | null>;
+}
+
+export function QueryTool({ insertTextRef }: QueryToolProps) {
   const [query, setQuery] = useState('SELECT * FROM information_schema.tables LIMIT 5;');
   const [result, setResult] = useState<QueryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { theme } = useTheme();
   const editorViewRef = useRef<EditorView | null>(null);
+
+  // Expose insertText function via ref
+  React.useEffect(() => {
+    if (insertTextRef) {
+      insertTextRef.current = (text: string) => {
+        const view = editorViewRef.current;
+        if (view) {
+          const { state } = view;
+          const selection = state.selection.main;
+          
+          view.dispatch({
+            changes: {
+              from: selection.from,
+              to: selection.to,
+              insert: text,
+            },
+            selection: { anchor: selection.from + text.length },
+          });
+          
+          // Update query state
+          const newText = query.slice(0, selection.from) + text + query.slice(selection.to);
+          setQuery(newText);
+        } else {
+          // Fallback: append to query
+          setQuery((prev) => {
+            const trimmed = prev.trim();
+            return trimmed + (trimmed && !trimmed.endsWith(' ') ? ' ' : '') + text;
+          });
+        }
+      };
+    }
+  }, [insertTextRef, query]);
 
   const executeQuery = async () => {
     setLoading(true);
